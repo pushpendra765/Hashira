@@ -1,0 +1,60 @@
+import java.io.*;
+import java.math.BigInteger;
+import java.util.*;
+import java.util.regex.*;
+
+public class PolynomialConstant {
+    public static void main(String[] args) throws Exception {
+        // Step 1: Read entire file
+        String json = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("input.json")));
+
+        // Step 2: Extract n and k using regex
+        Pattern keyPattern = Pattern.compile("\"n\"\\s*:\\s*(\\d+).*?\"k\"\\s*:\\s*(\\d+)", Pattern.DOTALL);
+        Matcher keyMatcher = keyPattern.matcher(json);
+        int n = 0, k = 0;
+        if (keyMatcher.find()) {
+            n = Integer.parseInt(keyMatcher.group(1));
+            k = Integer.parseInt(keyMatcher.group(2));
+        }
+
+        // Step 3: Extract base-value pairs (first k only)
+        Pattern pairPattern = Pattern.compile("\"(\\d+)\"\\s*:\\s*\\{\\s*\"base\"\\s*:\\s*\"(\\d+)\",\\s*\"value\"\\s*:\\s*\"([0-9a-zA-Z]+)\"\\s*\\}");
+        Matcher pairMatcher = pairPattern.matcher(json);
+
+        List<BigInteger> xList = new ArrayList<>();
+        List<BigInteger> yList = new ArrayList<>();
+
+        while (pairMatcher.find() && xList.size() < k) {
+            int index = Integer.parseInt(pairMatcher.group(1));
+            int base = Integer.parseInt(pairMatcher.group(2));
+            String value = pairMatcher.group(3);
+
+            xList.add(BigInteger.valueOf(index));
+            yList.add(new BigInteger(value, base));
+        }
+
+        if (xList.size() < k) {
+            System.out.println("Error: Not enough points found in JSON.");
+            return;
+        }
+
+        BigInteger[] x = xList.toArray(new BigInteger[0]);
+        BigInteger[] y = yList.toArray(new BigInteger[0]);
+
+        // Step 4: Apply Lagrange interpolation to find constant term c = P(0)
+        BigInteger constant = BigInteger.ZERO;
+        for (int i = 0; i < k; i++) {
+            BigInteger num = BigInteger.ONE;
+            BigInteger den = BigInteger.ONE;
+            for (int j = 0; j < k; j++) {
+                if (i == j) continue;
+                num = num.multiply(x[j].negate()); // (0 - xj)
+                den = den.multiply(x[i].subtract(x[j]));
+            }
+            BigInteger term = y[i].multiply(num).divide(den);
+            constant = constant.add(term);
+        }
+
+        System.out.println("Constant term c = " + constant);
+    }
+}
