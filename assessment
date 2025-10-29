@@ -1,60 +1,161 @@
-import java.io.*;
 import java.math.BigInteger;
 import java.util.*;
-import java.util.regex.*;
 
-public class PolynomialConstant {
-    public static void main(String[] args) throws Exception {
-        // Step 1: Read entire file
-        String json = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("input.json")));
-
-        // Step 2: Extract n and k using regex
-        Pattern keyPattern = Pattern.compile("\"n\"\\s*:\\s*(\\d+).*?\"k\"\\s*:\\s*(\\d+)", Pattern.DOTALL);
-        Matcher keyMatcher = keyPattern.matcher(json);
-        int n = 0, k = 0;
-        if (keyMatcher.find()) {
-            n = Integer.parseInt(keyMatcher.group(1));
-            k = Integer.parseInt(keyMatcher.group(2));
-        }
-
-        // Step 3: Extract base-value pairs (first k only)
-        Pattern pairPattern = Pattern.compile("\"(\\d+)\"\\s*:\\s*\\{\\s*\"base\"\\s*:\\s*\"(\\d+)\",\\s*\"value\"\\s*:\\s*\"([0-9a-zA-Z]+)\"\\s*\\}");
-        Matcher pairMatcher = pairPattern.matcher(json);
-
-        List<BigInteger> xList = new ArrayList<>();
-        List<BigInteger> yList = new ArrayList<>();
-
-        while (pairMatcher.find() && xList.size() < k) {
-            int index = Integer.parseInt(pairMatcher.group(1));
-            int base = Integer.parseInt(pairMatcher.group(2));
-            String value = pairMatcher.group(3);
-
-            xList.add(BigInteger.valueOf(index));
-            yList.add(new BigInteger(value, base));
-        }
-
-        if (xList.size() < k) {
-            System.out.println("Error: Not enough points found in JSON.");
-            return;
-        }
-
-        BigInteger[] x = xList.toArray(new BigInteger[0]);
-        BigInteger[] y = yList.toArray(new BigInteger[0]);
-
-        // Step 4: Apply Lagrange interpolation to find constant term c = P(0)
-        BigInteger constant = BigInteger.ZERO;
-        for (int i = 0; i < k; i++) {
-            BigInteger num = BigInteger.ONE;
-            BigInteger den = BigInteger.ONE;
-            for (int j = 0; j < k; j++) {
-                if (i == j) continue;
-                num = num.multiply(x[j].negate()); // (0 - xj)
-                den = den.multiply(x[i].subtract(x[j]));
+public class HashiraPlacementsSimple {
+    
+    private static BigInteger convertToDecimal(String value, int base) {
+        BigInteger result = BigInteger.ZERO;
+        BigInteger baseBig = BigInteger.valueOf(base);
+        BigInteger power = BigInteger.ONE;
+        
+        for (int i = value.length() - 1; i >= 0; i--) {
+            char c = value.charAt(i);
+            int digit;
+            
+            if (c >= '0' && c <= '9') {
+                digit = c - '0';
+            } else if (c >= 'a' && c <= 'z') {
+                digit = c - 'a' + 10;
+            } else if (c >= 'A' && c <= 'Z') {
+                digit = c - 'A' + 10;
+            } else {
+                throw new IllegalArgumentException("Invalid character in number: " + c);
             }
-            BigInteger term = y[i].multiply(num).divide(den);
-            constant = constant.add(term);
+            
+            if (digit >= base) {
+                throw new IllegalArgumentException("Digit " + digit + " exceeds base " + base);
+            }
+            
+            BigInteger digitBig = BigInteger.valueOf(digit);
+            result = result.add(digitBig.multiply(power));
+            power = power.multiply(baseBig);
         }
-
-        System.out.println("Constant term c = " + constant);
+        
+        return result;
+    }
+    
+    private static BigInteger[] multiplyPolynomials(BigInteger[] p1, BigInteger[] p2) {
+        int n = p1.length;
+        int m = p2.length;
+        BigInteger[] result = new BigInteger[n + m - 1];
+        Arrays.fill(result, BigInteger.ZERO);
+        
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < m; j++) {
+                result[i + j] = result[i + j].add(p1[i].multiply(p2[j]));
+            }
+        }
+        
+        return result;
+    }
+    
+    public static BigInteger[] solvePolynomial(int k, List<BigInteger> decimalRoots) {
+        BigInteger[] polynomial = new BigInteger[]{BigInteger.ONE};
+        
+        for (int i = 0; i < k && i < decimalRoots.size(); i++) {
+            BigInteger root = decimalRoots.get(i);
+            BigInteger[] factor = new BigInteger[]{root.negate(), BigInteger.ONE};
+            polynomial = multiplyPolynomials(polynomial, factor);
+        }
+        
+        return polynomial;
+    }
+    
+    public static void processTestCase(String testName, int n, int k, String[][] roots) {
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println(testName);
+        System.out.println("=".repeat(80));
+        
+        System.out.println("Parameters: n = " + n + ", k = " + k);
+        
+        List<BigInteger> decimalRoots = new ArrayList<>();
+        
+        System.out.println("\nALL ROOTS CONVERTED TO DECIMAL:");
+        System.out.println("-".repeat(80));
+        
+        for (String[] root : roots) {
+            int base = Integer.parseInt(root[0]);
+            String value = root[1];
+            BigInteger decimalValue = convertToDecimal(value, base);
+            decimalRoots.add(decimalValue);
+            System.out.println("Base " + base + ": '" + value + "' = " + decimalValue);
+        }
+        
+        System.out.println("\nUSING FIRST " + k + " ROOTS FOR POLYNOMIAL CONSTRUCTION:");
+        System.out.println("-".repeat(80));
+        
+        System.out.println("Roots used:");
+        for (int i = 0; i < k && i < decimalRoots.size(); i++) {
+            System.out.println("  Root " + (i+1) + ": " + decimalRoots.get(i));
+        }
+        
+        BigInteger[] coefficients = solvePolynomial(k, decimalRoots);
+        
+        System.out.println("\nPOLYNOMIAL COEFFICIENTS (from a₀ to aₘ):");
+        System.out.println("-".repeat(50));
+        for (int i = 0; i < coefficients.length; i++) {
+            System.out.printf("a%d = %s\n", i, coefficients[i].toString());
+        }
+        
+        System.out.println("\nPOLYNOMIAL FORM:");
+        System.out.println("-".repeat(50));
+        StringBuilder polyForm = new StringBuilder();
+        for (int i = coefficients.length - 1; i >= 0; i--) {
+            if (coefficients[i].compareTo(BigInteger.ZERO) != 0) {
+                if (polyForm.length() > 0) {
+                    if (coefficients[i].compareTo(BigInteger.ZERO) > 0) {
+                        polyForm.append(" + ");
+                    } else {
+                        polyForm.append(" - ");
+                    }
+                }
+                
+                BigInteger absCoeff = coefficients[i].abs();
+                if (!absCoeff.equals(BigInteger.ONE) || i == 0) {
+                    polyForm.append(absCoeff);
+                }
+                
+                if (i > 0) {
+                    polyForm.append("x");
+                    if (i > 1) {
+                        polyForm.append("^").append(i);
+                    }
+                }
+            }
+        }
+        polyForm.append(" = 0");
+        System.out.println(polyForm.toString());
+    }
+    
+    public static void main(String[] args) {
+        System.out.println("HASHIRA PLACEMENTS ASSIGNMENT");
+        System.out.println("=".repeat(80));
+        
+        // Test Case 1
+        String[][] testCase1Roots = {
+            {"10", "4"},      // Root 1
+            {"2", "111"},     // Root 2  
+            {"10", "12"},     // Root 3
+            {"4", "213"}      // Root 6
+        };
+        processTestCase("TEST CASE 1 RESULTS", 4, 3, testCase1Roots);
+        
+        // Test Case 2
+        String[][] testCase2Roots = {
+            {"6", "13444211440455345511"},
+            {"15", "aed7015a346d635"},
+            {"15", "6aeeb69631c227c"},
+            {"16", "e1b5e05623d881f"},
+            {"8", "316034514573652620673"},
+            {"3", "2122212201122002221120200210011020220200"},
+            {"3", "20120221122211000100210021102001201112121"},
+            {"6", "20220554335330240002224253"},
+            {"12", "45153788322a1255483"},
+            {"7", "1101613130313526312514143"}
+        };
+        processTestCase("TEST CASE 2 RESULTS", 10, 7, testCase2Roots);
+        
+        System.out.println("\n" + "=".repeat(80));
+        System.out.println("PROCESSING COMPLETE");
     }
 }
